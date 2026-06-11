@@ -1,0 +1,37 @@
+[project]
+name = "agentloop"
+version = "0.1.0"
+description = "Sandboxed Claude Code agent powered by OpenShell"
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{name = "Gil Klein"}]
+keywords = ["claude", "agent", "sandbox", "openshell", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+    "Environment :: Console",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "click>=8.1",
+]
+
+[project.scripts]
+agentloop = "agentloop.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/agentshed/agentloop"
+Repository = "https://github.com/agentshed/agentloop"
+Issues = "https://github.com/agentshed/agentloop/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentloop"]
