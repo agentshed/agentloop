@@ -172,6 +172,10 @@ def run_options(fn):
         click.option("-D", "--discard-output", is_flag=True, default=False, help="Discard all sandbox files on exit — nothing is saved locally."),
         click.option("--output-paths", multiple=True, help="Sandbox paths to download (repeatable)."),
         click.option("--output-on-error", is_flag=True, default=False, help="Save output even on error/kill."),
+        click.option("-N", "--name-only", is_flag=True, default=False,
+                     help="Print ONLY the sandbox name to stdout, nothing else (unattended runs only). "
+                          "Claude still runs; its output is saved to the output dir instead of streamed. "
+                          "Pair with --keep to act on the sandbox afterward."),
 
         # Network
         click.option("--no-google-auth", is_flag=True, default=False, help="Disable Google OAuth/accounts endpoints."),
@@ -310,9 +314,15 @@ def _do_run_inner(*, directory, **kwargs):
 
     dry_run = kwargs.get("dry_run", False)
     verbose = kwargs.get("verbose", 0)
+    name_only = bool(kwargs.get("name_only"))
 
     if kwargs.get("no_gitignore") and kwargs.get("enforce_gitignore"):
         raise click.UsageError("--no-gitignore and --enforce-gitignore are mutually exclusive.")
+
+    if name_only and kwargs.get("prompt") is None and not kwargs.get("prompt_file"):
+        raise click.UsageError(
+            "--name-only requires -p/--prompt or -f/--prompt-file (unattended mode)."
+        )
 
     has_remote = bool(kwargs.get("repo"))
     github_enabled = config.get("providers", {}).get("github", True)
@@ -370,6 +380,7 @@ def _do_run_inner(*, directory, **kwargs):
     extra_args = kwargs.get("extra_args")
 
     sandbox_name: str | None = None
+    claude_stdout: str | None = None
     start_time = time.time()
     exit_code = 1
 
@@ -416,11 +427,12 @@ def _do_run_inner(*, directory, **kwargs):
             claude_args.extend(["--effort", config["effort"]])
         exec_timeout = config["sandbox"]["timeout"]
 
-        exit_code = run_claude(
+        exit_code, claude_stdout = run_claude(
             sandbox_name, workdir,
             prompt=prompt,
             claude_command=claude_cmd, claude_args=claude_args,
             extra_args=extra_args, timeout=exec_timeout,
+            capture_output=name_only,
             dry_run=dry_run, verbose=verbose,
         )
 
@@ -443,12 +455,23 @@ def _do_run_inner(*, directory, **kwargs):
                 prompt=prompt, start_time=start_time,
                 dry_run=dry_run, verbose=verbose,
             )
+            # In name-only mode Claude's output is captured, not streamed —
+            # save it so nothing is lost while stdout stays clean.
+            if name_only and claude_stdout and not dry_run:
+                os.makedirs(output_dir, exist_ok=True)
+                with open(os.path.join(output_dir, "claude_output.txt"), "w") as f:
+                    f.write(claude_stdout)
 
         if policy_path.is_file():
             os.unlink(policy_path)
 
         if sandbox_name and not config["sandbox"].get("keep"):
             delete_sandbox(sandbox_name, dry_run=dry_run, verbose=verbose)
+
+        # Surface the (possibly auto-generated) sandbox name for scripting.
+        # This is the last thing written to stdout for unattended runs.
+        if sandbox_name and prompt is not None:
+            click.echo(sandbox_name if name_only else f"sandbox name: {sandbox_name}")
 
     sys.exit(exit_code)
 
