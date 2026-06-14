@@ -405,11 +405,18 @@ def run_claude(
     claude_args: list[str] | None = None,
     extra_args: list[str] | None = None,
     timeout: int = 0,
+    capture_output: bool = False,
     dry_run: bool = False,
     verbose: int = 0,
-) -> int:
-    """Run Claude Code. Unattended if prompt is given, interactive otherwise."""
+) -> tuple[int, str | None]:
+    """Run Claude Code. Unattended if prompt is given, interactive otherwise.
+
+    Returns (exit_code, captured_stdout). captured_stdout is non-None only when
+    capture_output is set on an unattended run (name-only mode): Claude's output
+    is captured instead of streamed to the terminal.
+    """
     unattended = prompt is not None
+    quiet = unattended and capture_output
     cmd = ["sandbox", "exec", "-n", sandbox_name, "--workdir", workdir]
 
     if unattended:
@@ -430,10 +437,12 @@ def run_claude(
     result = run_openshell(
         cmd, check=False,
         passthrough=not unattended,
-        capture=False,
+        capture=quiet,
         dry_run=dry_run, verbose=verbose,
     )
-    return 0 if result is None else result.returncode
+    if result is None:
+        return 0, None
+    return result.returncode, (result.stdout if quiet else None)
 
 
 def collect_output(
